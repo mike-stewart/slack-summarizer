@@ -1,3 +1,4 @@
+import json
 import re
 import sys
 import time
@@ -96,20 +97,17 @@ class SlackClient:
                            exception=SlackApiError)
             messages_info.extend(result["messages"])
 
-        # Filter for human messages only
-        messages = list(filter(lambda m: "subtype" not in m, messages_info))
+        messages = messages_info
 
         if len(messages) < 1:
             return None
 
         messages_text = []
         for message in messages[::-1]:
-            # Ignore bot messages and empty messages
-            if "bot_id" in message or len(message["text"].strip()) == 0:
-                continue
-
             # Get speaker name
-            speaker_name = self.get_user_name(message["user"]) or "somebody"
+            user_key = "user" if "user" in message else "bot_id"
+            username = message["username"] if "username" in message else None
+            speaker_name = self.get_user_name(message[user_key]) or username or "somebody"
 
             # Get message body from result dict.
             body_text = message["text"].replace("\n", "\\n")
@@ -120,12 +118,33 @@ class SlackClient:
             # all channel id replace to "other channel"
             body_text = re.sub(r"<#[A-Z0-9]+>", " other channel ", body_text)
 
-            messages_text.append(f"{speaker_name}: {body_text}")
+            fields = self.extract_fields(message['attachments']) if 'attachments' in message else []
+
+            message_object = {
+                "user": speaker_name,
+                "text": body_text,
+                "additional_data": fields
+            }
+
+            messages_text.append(json.dumps(message_object))
 
         if len(messages_text) == 0:
             return None
         else:
             return messages_text
+
+    def extract_fields(self, attachments):
+        extracted_objects = []
+
+        for attachment in attachments:
+            if 'fields' in attachment:
+                extracted_objects.append(attachment['fields'])
+            if 'blocks' in attachment:
+                filtered_blocks = [block for block in attachment['blocks'] if block.get('type') == 'section']
+
+                extracted_objects.append(filtered_blocks)
+
+        return extracted_objects
 
     def get_user_name(self, user_id: str) -> str:
         """ Get the name of a user with the given ID.
@@ -235,12 +254,13 @@ class SlackClient:
         """
         try:
             self._wait_api_call()
+            # This only selects for private channels: change to "private_channel,public_channel" to get all channels
             result = retry(lambda: self.client.conversations_list(
-                types="public_channel", exclude_archived=True, limit=1000),
+                types="private_channel", exclude_archived=True, limit=1000),
                            exception=SlackApiError)
             channels_info = [
                 channel for channel in result['channels']
-                if not channel["is_archived"] and channel["is_channel"]
+                if not channel["is_archived"]
             ]
             channels_info = sort_by_numeric_prefix(channels_info,
                                                    get_key=lambda x: x["name"])

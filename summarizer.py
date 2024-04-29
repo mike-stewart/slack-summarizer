@@ -30,31 +30,29 @@ def summarize(text: str, language: str = "Japanese"):
         >>> summarize("Alice: Hi\nBob: Hello\nAlice: How are you?\nBob: I'm doing well, thanks.")
         '- Alice greeted Bob.\n- Bob responded with a greeting.\n- Alice asked how Bob was doing.\n- Bob replied that he was doing well.'
     """
-    response = openai.ChatCompletion.create(
-        model=CHAT_MODEL,
-        temperature=TEMPERATURE,
-        messages=[{
+    messages = [{
             "role":
             "system",
             "content":
             "\n".join([
-                'The chat log format consists of one line per message in the format "Speaker: Message".',
-                "The `\\n` within the message represents a line break."
-                f'The user understands {language} only.',
-                f'So, The assistant need to speak in {language}.',
+                'The chat log format consists of one JSON object per message.',
+                "Each JSON object has up to three fields: 'user' is the user or bot that posted the message, 'text' may include the text of the message, and 'additional_fields' may include structured data describing the message in more detail."
+                f'The user understands {language}, so the assistant needs to respond in that language only.'
             ])
         }, {
             "role":
             "user",
             "content":
             "\n".join([
-                f"Please meaning summarize the following chat log to flat bullet list in {language}.",
+                f"Summarize the following chat log in bullet format.",
                 "It isn't line by line summary.",
-                "Do not include greeting/salutation/polite expressions in summary.",
-                "With make it easier to read."
-                f"Write in {language}.", "", text
+                "Do not include greetings in the summary.", text
             ])
-        }])
+        }]
+    response = openai.ChatCompletion.create(
+        model=CHAT_MODEL,
+        temperature=TEMPERATURE,
+        messages=messages)
 
     if DEBUG:
         print(response["choices"][0]["message"]['content'])
@@ -157,9 +155,10 @@ CHANNEL_ID = str(os.environ.get('SLACK_POST_CHANNEL_ID')).strip()
 LANGUAGE = str(os.environ.get('LANGUAGE') or "Japanese").strip()
 TIMEZONE_STR = str(os.environ.get('TIMEZONE') or 'Asia/Tokyo').strip()
 TEMPERATURE = float(os.environ.get('TEMPERATURE') or 0.3)
-CHAT_MODEL = str(os.environ.get('CHAT_MODEL') or "gpt-3.5-turbo").strip()
+CHAT_MODEL = str(os.environ.get('CHAT_MODEL') or "gpt-4-turbo").strip()
 DEBUG = str(os.environ.get('DEBUG') or "").strip() != ""
-MAX_BODY_TOKENS = 3000
+MAX_BODY_TOKENS = 100000
+READ_CHANNEL= str(os.environ.get('READ_CHANNEL')).strip()
 
 if OPEN_AI_TOKEN == "" or SLACK_BOT_TOKEN == "" or CHANNEL_ID == "":
     print("OPEN_AI_TOKEN, SLACK_BOT_TOKEN, CHANNEL_ID must be set.")
@@ -181,9 +180,14 @@ def runner():
     for channel in slack_client.channels:
         if DEBUG:
             print(channel["name"])
+
+        if channel["name"] != READ_CHANNEL:
+            continue
+
         messages = slack_client.load_messages(channel["id"], start_time,
                                               end_time)
         if messages is None:
+            print("Nothing to see here")
             continue
 
         # remove emojis in messages
