@@ -45,8 +45,8 @@ def summarize(text: str, language: str = "Japanese"):
             "content":
             "\n".join([
                 f"Summarize the following chat log in bullet format.",
-                "It isn't line by line summary.",
-                "Do not include greetings in the summary.", text
+                ADDITIONAL_PROMPT,
+                "Do not include greetings in the summary. Represent bullets with an asterix followed by a space.", text
             ])
         }]
     response = openai.ChatCompletion.create(
@@ -71,7 +71,7 @@ def get_time_range():
         >>> print(start_time, end_time)
         2022-05-17 09:00:00+09:00 2022-05-18 10:00:00+09:00
     """
-    hours_back = 25
+    hours_back = LOOKBACK_HOURS
     timezone = pytz.timezone(TIMEZONE_STR)
     now = datetime.now(timezone)
     yesterday = now - timedelta(hours=hours_back)
@@ -152,13 +152,15 @@ def split_messages_by_token_count(messages: list[str]) -> list[list[str]]:
 OPEN_AI_TOKEN = str(os.environ.get('OPEN_AI_TOKEN')).strip()
 SLACK_BOT_TOKEN = str(os.environ.get('SLACK_BOT_TOKEN')).strip()
 CHANNEL_ID = str(os.environ.get('SLACK_POST_CHANNEL_ID')).strip()
-LANGUAGE = str(os.environ.get('LANGUAGE') or "Japanese").strip()
+LANGUAGE = str(os.environ.get('LANGUAGE') or "English").strip()
 TIMEZONE_STR = str(os.environ.get('TIMEZONE') or 'Asia/Tokyo').strip()
-TEMPERATURE = float(os.environ.get('TEMPERATURE') or 0.3)
+TEMPERATURE = float(os.environ.get('TEMPERATURE') or 0.2)
 CHAT_MODEL = str(os.environ.get('CHAT_MODEL') or "gpt-4-turbo").strip()
 DEBUG = str(os.environ.get('DEBUG') or "").strip() != ""
 MAX_BODY_TOKENS = 100000
 READ_CHANNEL= str(os.environ.get('READ_CHANNEL')).strip()
+ADDITIONAL_PROMPT= str(os.environ.get('ADDITIONAL_PROMPT') or '').strip()
+LOOKBACK_HOURS=int(os.environ.get('LOOKBACK_HOURS') or 24)
 
 if OPEN_AI_TOKEN == "" or SLACK_BOT_TOKEN == "" or CHANNEL_ID == "":
     print("OPEN_AI_TOKEN, SLACK_BOT_TOKEN, CHANNEL_ID must be set.")
@@ -194,11 +196,15 @@ def runner():
         messages = list(map(remove_emoji, messages))
 
         result_text.append(f"----\n<#{channel['id']}>\n")
-        for splitted_messages in split_messages_by_token_count(messages):
+
+        split_messages = split_messages_by_token_count(messages)
+        for i, splitted_messages in enumerate(split_messages, start=1):
             text = summarize("\n".join(splitted_messages), LANGUAGE)
+            if len(split_messages) > 1:
+                result_text.append(f"Batch {i} of {len(split_messages)}:\n")
             result_text.append(text)
 
-    title = (f"{start_time.strftime('%Y-%m-%d')} public channels summary\n\n")
+    title = (f"{start_time.strftime('%Y-%m-%d')} channel summary\n\n")
 
     if DEBUG:
         print("\n".join(result_text))
