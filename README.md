@@ -19,6 +19,20 @@ https://platform.openai.com/docs/data-usage-policies
 
 If you have any questions, please feel free to contact me on http://twitter.com/masuidrive_en or http://twitter.com/masuidrive.
 
+## Developing with Docker
+
+Create a local.env environment file, with the following variables:
+```
+OPEN_AI_TOKEN=
+SLACK_BOT_TOKEN=
+SLACK_POST_CHANNEL_ID=
+LANGUAGE=
+READ_CHANNEL=
+```
+
+When you're ready, build and run application with:
+`docker compose up --build`.
+
 ## How to set it up on GitHub Actions
 
 It runs on GitHub Actions every day at 5:00 a.m., so if you want to run it in a different environment, you'll have to figure it out.
